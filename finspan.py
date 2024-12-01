@@ -75,6 +75,7 @@ METRICS = {
     },
 }
 
+
 # API
 def get_income_statements(symbol):
     with urllib.request.urlopen(f"{API_URL}/v3/income-statement/{symbol}?period=annual&apikey={API_KEY}") as income_statements_url:
@@ -154,12 +155,12 @@ def draw_chart(companies, analysis, key, title, formatting):
         plt.ylim(bottom=0)
 
     ax = plt.gca()
-    
+
     # Legend
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
     ax.legend(companies, loc="upper center", bbox_to_anchor=(0.5, -0.1), fancybox=True, ncol=len(companies))
-    
+
     # Grid
     ax.set_axisbelow(True)
     ax.yaxis.grid(color="lightgray")
@@ -184,6 +185,7 @@ if __name__ == "__main__":
         os.makedirs("analysis")
 
     analysis = {}
+    calendar_years = set()
     for company in companies:
         analysis[company] = {
             "labels": [],
@@ -200,7 +202,8 @@ if __name__ == "__main__":
         market_caps = get_market_caps(company, end_date)
 
         for income_statement, balance_sheet_statement in zip(income_statements, balance_sheet_statements):
-            analysis[company]["labels"].append(income_statement["calendarYear"])
+            analysis[company]["labels"].append(int(income_statement["calendarYear"]))
+            calendar_years.add(int(income_statement["calendarYear"]))
 
             # Find the company's market capitalization on the date of the statement
             for market_cap in market_caps:
@@ -211,26 +214,34 @@ if __name__ == "__main__":
                     for metric in METRICS.keys():
                         if metric not in analysis[company]:
                             analysis[company][metric] = []
-
                         analysis[company][metric].append(compute_metric(metric, income_statement, balance_sheet_statement, market_cap))
-
                     break
 
     for metric in METRICS.keys():
         draw_chart(companies, analysis, metric, METRICS[metric]["name"], METRICS[metric]["type"])
 
-        with open(f"./analysis/{metric}.csv", "w", newline="") as file:
+        with (open(f"./analysis/{metric}.csv", "w", newline="") as file):
             writer = csv.writer(file, delimiter=",")
 
-            header_row = analysis[company]["labels"].copy()
+            header_row = list(calendar_years)
+            header_row.sort()
+
             header_row.insert(0, "")
             header_row.append("Average")
             writer.writerow(header_row)
 
             for company in companies:
                 metric_data = analysis[company][metric]
-
                 metric_data_row = metric_data.copy()
+
+                offset_start = min(analysis[company]["labels"]) - min(calendar_years)
+                for _ in range(offset_start):
+                    metric_data_row.insert(0, None)
+
+                offset_end = max(calendar_years) - max(analysis[company]["labels"])
+                for _ in range(offset_end):
+                    metric_data_row.append(None)
+
                 metric_data_row.insert(0, company)
                 metric_data_row.append(sum(metric_data) / len(metric_data))
                 writer.writerow(metric_data_row)
