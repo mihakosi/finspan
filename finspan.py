@@ -140,7 +140,7 @@ def compute_metric(metric, income_statement, balance_sheet_statement, market_cap
             return None
 
 
-def draw_chart(companies, analysis, key, title, formatting):
+def draw_chart(companies, analysis, labels, key, title, formatting):
     min_value = 0
     for company in companies:
         plt.plot(analysis[company]["labels"], analysis[company][key])
@@ -150,6 +150,7 @@ def draw_chart(companies, analysis, key, title, formatting):
             min_value = company_min_value
 
     plt.title(title)
+    plt.xticks(labels)
 
     if min_value == 0:
         plt.ylim(bottom=0)
@@ -218,14 +219,15 @@ if __name__ == "__main__":
                     break
 
     for metric in METRICS.keys():
-        draw_chart(companies, analysis, metric, METRICS[metric]["name"], METRICS[metric]["type"])
+        labels = list(calendar_years)
+        labels.sort()
+
+        draw_chart(companies, analysis, labels, metric, METRICS[metric]["name"], METRICS[metric]["type"])
 
         with (open(f"./analysis/{metric}.csv", "w", newline="") as file):
             writer = csv.writer(file, delimiter=",")
 
-            header_row = list(calendar_years)
-            header_row.sort()
-
+            header_row = labels
             header_row.insert(0, "")
             header_row.append("Average")
             writer.writerow(header_row)
