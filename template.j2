@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Stock analysis</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 0;
+        }
+
+        body {
+            font-family: sans-serif;
+            background-color: #fafafa;
+            color: #263238;
+            margin: 0;
+        }
+
+        .container {
+            width: 760px;
+            max-width: 100%;
+            overflow: hidden;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 2rem;
+        }
+
+        section {
+            margin-bottom: 2rem;
+        }
+
+        img {
+            display: block;
+            margin: 0 auto;
+            width: 600px;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .dataframe-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .dataframe {
+            border-collapse: collapse;
+            width: 100%;
+            text-align: right;
+        }
+
+        .dataframe th, .dataframe td {
+            padding: 0.25rem;
+            border: solid 2px #bdbdbd;
+        }
+
+        .dataframe th:first-child, .dataframe td:first-child {
+            text-align: left;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Stock analysis</h1>
+    <h2>{{ ', '.join(companies) }}</h2>
+
+    {% for metric in report.keys() %}
+        <section>
+            <h3>{{ report[metric]['name'] }}</h3>
+            <img src="{{ report[metric]['chart'] }}" alt="{{ report[metric]['name'] }}"/>
+            <div class="dataframe-wrapper">
+                {{ report[metric]['table'] }}
+            </div>
+        </section>
+    {% endfor %}
+</div>
+</body>
+</html>

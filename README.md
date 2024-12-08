@@ -5,7 +5,10 @@ Finspan is a simple program for stock analysis. It allows you to quickly obtain 
 Finspan requires Python 3.12.
 
 Finspan also requires the following packages:
+* `jinja2`
 * `matplotlib`
+* `minify-html`
+* `pandas`
 * `python-dateutil`
 
 ### External data
@@ -59,6 +62,6 @@ Finspan currently computes the following metrics:
 * P/S (price to sales ratio)
 * P/B (price to book value ratio)
 
-For each metric, a chart that shows the change of the metric values through years and the corresponding spreadsheet with all metric values and their averages for each analyzed company is exported.
+All metrics are conveniently available in the exported `analysis.html` HTML file.  Additionally, for each metric, a chart that shows the change of the metric values through years and the corresponding spreadsheet with all metric values and their averages for each analyzed company is exported.
 
 **DISCLAIMER:** Investments in securities are associated with financial risks. The author does not promote any specific product, does not guarantee the correct operation of the program, and does not assume any responsibility for possible financial losses.

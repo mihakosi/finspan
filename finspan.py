@@ -7,7 +7,11 @@ import matplotlib.ticker as mtick
 import os
 
 from datetime import datetime
+
+import pandas as pd
 from dateutil.relativedelta import relativedelta
+from jinja2 import Environment, FileSystemLoader
+from minify_html import minify_html
 
 from secret import API_KEY
 
@@ -78,28 +82,32 @@ METRICS = {
 
 # API
 def get_income_statements(symbol):
-    with urllib.request.urlopen(f"{API_URL}/v3/income-statement/{symbol}?period=annual&apikey={API_KEY}") as income_statements_url:
+    with urllib.request.urlopen(
+            f"{API_URL}/v3/income-statement/{symbol}?period=annual&apikey={API_KEY}") as income_statements_url:
         income_statements_response = json.load(income_statements_url)
         income_statements_response = sorted(income_statements_response, key=lambda d: d["date"])
         return income_statements_response
 
 
 def get_balance_sheet_statements(symbol):
-    with urllib.request.urlopen(f"{API_URL}/v3/balance-sheet-statement/{symbol}?period=annual&apikey={API_KEY}") as balance_sheet_statements_url:
+    with urllib.request.urlopen(
+            f"{API_URL}/v3/balance-sheet-statement/{symbol}?period=annual&apikey={API_KEY}") as balance_sheet_statements_url:
         balance_sheet_statements_response = json.load(balance_sheet_statements_url)
         balance_sheet_statements_response = sorted(balance_sheet_statements_response, key=lambda d: d["date"])
         return balance_sheet_statements_response
 
 
 def get_market_caps(symbol, end):
-    with urllib.request.urlopen(f"{API_URL}/v3/historical-market-capitalization/{symbol}?to={end}&apikey={API_KEY}") as market_caps_url:
+    with urllib.request.urlopen(
+            f"{API_URL}/v3/historical-market-capitalization/{symbol}?to={end}&apikey={API_KEY}") as market_caps_url:
         market_caps_response = json.load(market_caps_url)
         market_caps_response = sorted(market_caps_response, key=lambda d: d["date"])
         return market_caps_response
 
 
 def compute_metric(metric, income_statement, balance_sheet_statement, market_cap):
-    book_value = balance_sheet_statement["totalAssets"] - balance_sheet_statement["goodwillAndIntangibleAssets"] - balance_sheet_statement["totalLiabilities"]
+    book_value = balance_sheet_statement["totalAssets"] - balance_sheet_statement["goodwillAndIntangibleAssets"] - \
+                 balance_sheet_statement["totalLiabilities"]
 
     match metric:
         case "roa":
@@ -125,7 +133,8 @@ def compute_metric(metric, income_statement, balance_sheet_statement, market_cap
             return balance_sheet_statement["totalLiabilities"] / balance_sheet_statement["totalAssets"]
 
         case "liquidity":
-            return balance_sheet_statement["cashAndShortTermInvestments"] / balance_sheet_statement["totalCurrentLiabilities"]
+            return balance_sheet_statement["cashAndShortTermInvestments"] / balance_sheet_statement[
+                "totalCurrentLiabilities"]
         case "solvency":
             return balance_sheet_statement["totalLiabilities"] / balance_sheet_statement["totalStockholdersEquity"]
 
@@ -141,6 +150,8 @@ def compute_metric(metric, income_statement, balance_sheet_statement, market_cap
 
 
 def draw_chart(companies, analysis, labels, key, title, formatting):
+    plt.rcParams["font.family"] = ["Helvetica", "Arial"]
+
     min_value = 0
     for company in companies:
         plt.plot(analysis[company]["labels"], analysis[company][key])
@@ -186,7 +197,7 @@ if __name__ == "__main__":
         os.makedirs("analysis")
 
     analysis = {}
-    calendar_years = set()
+    fiscal_years = set()
     for company in companies:
         analysis[company] = {
             "labels": [],
@@ -204,7 +215,7 @@ if __name__ == "__main__":
 
         for income_statement, balance_sheet_statement in zip(income_statements, balance_sheet_statements):
             analysis[company]["labels"].append(int(income_statement["calendarYear"]))
-            calendar_years.add(int(income_statement["calendarYear"]))
+            fiscal_years.add(int(income_statement["calendarYear"]))
 
             # Find the company's market capitalization on the date of the statement
             for market_cap in market_caps:
@@ -215,35 +226,64 @@ if __name__ == "__main__":
                     for metric in METRICS.keys():
                         if metric not in analysis[company]:
                             analysis[company][metric] = []
-                        analysis[company][metric].append(compute_metric(metric, income_statement, balance_sheet_statement, market_cap))
+                        analysis[company][metric].append(
+                            compute_metric(metric, income_statement, balance_sheet_statement, market_cap))
                     break
 
+    report = {}
     for metric in METRICS.keys():
-        labels = list(calendar_years)
-        labels.sort()
+        labels = sorted(list(fiscal_years))
 
         draw_chart(companies, analysis, labels, metric, METRICS[metric]["name"], METRICS[metric]["type"])
 
-        with (open(f"./analysis/{metric}.csv", "w", newline="") as file):
+        with open(f"./analysis/{metric}.csv", "w", newline="") as file:
             writer = csv.writer(file, delimiter=",")
 
-            header_row = labels
-            header_row.insert(0, "")
-            header_row.append("Average")
+            header_row = [" "] + labels + ["Average"]
+            header_row = list(map(lambda x: f"'{x}'", header_row))
             writer.writerow(header_row)
 
             for company in companies:
                 metric_data = analysis[company][metric]
                 metric_data_row = metric_data.copy()
 
-                offset_start = min(analysis[company]["labels"]) - min(calendar_years)
+                # Format metric values
+                if METRICS[metric]["type"] == "percent":
+                    metric_data_row = list(map(lambda x: f"{(x * 100):.2f}\xa0%", metric_data_row))
+                else:
+                    metric_data_row = list(map(lambda x: f"{x:.2f}", metric_data_row))
+
+                # Add empty cells for missing fiscal years to the start or the end of the table
+                offset_start = min(analysis[company]["labels"]) - min(fiscal_years)
                 for _ in range(offset_start):
-                    metric_data_row.insert(0, None)
+                    metric_data_row.insert(0, " ")
 
-                offset_end = max(calendar_years) - max(analysis[company]["labels"])
+                offset_end = max(fiscal_years) - max(analysis[company]["labels"])
                 for _ in range(offset_end):
-                    metric_data_row.append(None)
+                    metric_data_row.append(" ")
 
-                metric_data_row.insert(0, company)
-                metric_data_row.append(sum(metric_data) / len(metric_data))
+                # Compute the average value
+                average = sum(metric_data) / len(metric_data)
+                if METRICS[metric]["type"] == "percent":
+                    average = f"{(average * 100):.2f}\xa0%"
+                else:
+                    average = f"{average:.2f}"
+
+                metric_data_row = [f"{company}"] + metric_data_row + [f"{average}"]
+                metric_data_row = list(map(lambda x: f"'{x}'", metric_data_row))
+
                 writer.writerow(metric_data_row)
+
+        table = pd.read_csv(f"./analysis/{metric}.csv", index_col=False, quotechar="'", dtype=str)
+        report[metric] = {
+            "name": METRICS[metric]["name"],
+            "chart": f"./{metric}.png",
+            "table": table.to_html(index=False, border=0),
+        }
+
+    env = Environment(loader=FileSystemLoader("."))
+    template = env.get_template("template.j2")
+    html_report = minify_html.minify(template.render(report=report, companies=companies), minify_css=True,
+                                     do_not_minify_doctype=True)
+    with open("./analysis/analysis.html", "w") as file:
+        file.write(html_report)
